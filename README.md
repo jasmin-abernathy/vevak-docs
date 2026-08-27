@@ -63,18 +63,18 @@ Temporary periodic tracking, automatic emergency-service contact, covert trackin
 
 ## Repository topology
 
-Current accessible public repositories:
+Current VeVak repositories:
 
-- `jasmin-abernathy/vevak` — Android reference implementation and roadmap;
+- `jasmin-abernathy/vevak` — Android application, shared core, `foss` and `play` Gradle flavors, roadmap and implementation documentation;
 - `jasmin-abernathy/Vevak-website` — public website;
 - `jasmin-abernathy/vevak-docs` — this documentation repository;
 - `jasmin-abernathy/vevak-brand` — brand and design guidance.
 
-Planned Android split discussed in August 2026:
+The Android application deliberately remains a **single repository**. The `foss` and `play` variants share the same tested core and isolate proprietary dependencies through Gradle source sets/dependency scopes. This reduces duplication and prevents security or reliability fixes from drifting between copies.
 
-- `VeVaK-android-FOSS` — canonical FOSS build using platform/open Android APIs;
-- `VeVaK-android-PlayStore` — Play-specific build, including proprietary location components only when justified;
-- `VeVaK-android-Custom` — separated custom/integration work so client-specific requirements do not contaminate the canonical build.
+A separate custom/integration repository should only be created if a real, durable use case appears that cannot be cleanly isolated inside the existing architecture.
+
+See `architecture/ADR-001-single-android-repository.md` for the decision record.
 
 ## Safety wording
 
