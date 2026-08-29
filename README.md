@@ -76,6 +76,12 @@ A separate custom/integration repository should only be created if a real, durab
 
 See `architecture/ADR-001-single-android-repository.md` for the decision record.
 
+## Support the project
+
+VeVak is intended to remain usable without a donation. Voluntary contributions help cover development, real-device testing, documentation and maintenance time, but they do not unlock features, security capabilities or priority access.
+
+- [Support VeVak / Soutenir VeVak](https://vevak.lepotager.org/soutenir/)
+
 ## Safety wording
 
 VeVak is not an emergency service and must never be the user's only safety mechanism. It does not guarantee SMS delivery, location availability or background execution.
