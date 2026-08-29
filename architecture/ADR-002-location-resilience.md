@@ -16,22 +16,41 @@ Real-device testing exposed a failure mode in the first trusted-place implementa
 
 Android's documented behaviour is intentional. Location-sensitive Wi-Fi identifiers and scan results are gated by location permissions/settings, and disabling Location can clear the platform fused-location cache. A normal third-party application must not claim it can silently turn these services back on.
 
+A product requirement added during beta validation is that **users must not be forced to activate Android Location merely to register the Wi-Fi connection they are currently using as Maison**. Location should instead be presented as an optional reliability improvement.
+
 ## Decision
 
 VeVak uses graceful degradation instead of trying to bypass Android.
 
-### 1. Trusted Wi-Fi continuity
+### 1. Trusted Wi-Fi: two levels of identification
 
-When Android exposes the SSID, VeVak hashes it with SHA-256 and compares it to the configured trusted-network hash.
+#### Session-only mode — no Location required
 
-At the same time, VeVak stores an app-private hash of Android's opaque `Network.networkHandle` for that **already verified network session**, together with Android's read-only `Settings.Global.BOOT_COUNT`. If Android later redacts the SSID because Location was switched off, VeVak may continue to recognise the trusted place only while both conditions remain true:
+When the user chooses the current Wi-Fi as Maison while Android does not expose the SSID, VeVak does not fail and does not ask the user to enable Location first.
+
+It stores, in app-private runtime state only:
+
+- a hash of Android's opaque `Network.networkHandle` for the current active Wi-Fi session;
+- Android's read-only `Settings.Global.BOOT_COUNT`.
+
+The persistent settings store only a non-sensitive marker saying that Maison is configured in session-only mode. The actual network-session identifier is not included in `.vvk` backups.
+
+This mode recognises Maison only while both conditions remain true:
 
 - the exact Android Wi-Fi network session is unchanged;
-- the device is still in the same boot in which that session was positively verified.
+- the phone remains in the same boot.
 
-A visible SSID non-match always wins. The session marker is never allowed to override evidence that the phone is connected to a different readable Wi-Fi network.
+A disconnect/reconnect, network-session replacement or reboot invalidates the shortcut. VeVak fails closed rather than guessing from IP addresses, gateway addresses or other common network properties.
 
-After Wi-Fi reconnect, reboot or network-session replacement, the continuity proof fails closed until Android allows a new positive Wi-Fi identification. The boot-count check is intentionally redundant with the network handle so that a later reuse of a handle value cannot resurrect an old trusted session across a reboot.
+#### Durable mode — Location optional but useful
+
+When Android exposes the SSID, VeVak hashes it with SHA-256 and stores only that hash. The SSID itself is never stored in clear text.
+
+Android treats SSID access as location-sensitive. Therefore enabling precise Location permission and the global Android Location switch can allow VeVak to make Maison durable across Wi-Fi reconnections and device reboots. The UI presents this as an **optional improvement**, not a prerequisite for registering the current connection.
+
+At the same time, VeVak stores an app-private hash of Android's opaque `Network.networkHandle` for that already verified network session, together with Android's boot count. If Android later redacts the SSID because Location was switched off, VeVak may continue to recognise the trusted place while that same network session remains active.
+
+A visible SSID non-match always wins for durable configurations. A session marker is never allowed to override evidence that the phone is connected to a different readable Wi-Fi network.
 
 This requires `ACCESS_NETWORK_STATE`, a normal read-only Android permission. Reading the global boot count also requires no write access. The canonical FOSS variant still does not request `INTERNET`.
 
@@ -72,25 +91,32 @@ Therefore radio-environment learning is deferred until real-device evidence show
 
 ### Positive
 
+- users can register the current Wi-Fi connection as Maison without enabling Android Location;
+- Location is now an optional reliability enhancement rather than a setup prerequisite for the current session;
 - switching Location off no longer necessarily destroys every useful fallback;
-- the trusted-place shortcut survives the same already-verified Wi-Fi session within the same boot;
+- the trusted-place shortcut survives the same Wi-Fi session within the same boot;
+- durable SSID hashing remains available when the user chooses to permit it;
 - VeVak is independent from Android's volatile location cache for up to 24 hours;
 - no Internet permission or central location service is added;
 - stale data is explicitly aged instead of masquerading as current.
 
 ### Negative / limits
 
+- session-only Maison does not survive a Wi-Fi reconnect or reboot;
 - VeVak still cannot obtain a genuinely new GPS/network location while Android Location is disabled;
-- trusted-place continuity does not survive a Wi-Fi reconnect/reboot unless the SSID can be positively read again;
+- durable trusted-place recognition across reconnect/reboot still depends on Android exposing the SSID at least once;
 - the app now deliberately retains one precise coordinate locally for up to 24 hours;
 - real-device validation remains required across Android versions and manufacturer network/background implementations.
 
 ## Required regression tests
 
-- register trusted Wi-Fi with Location on, then switch Location off without disconnecting Wi-Fi: trusted-place response should continue;
-- switch to another readable Wi-Fi: the old trusted session must not match;
-- disconnect/reconnect while Location stays off: fail closed rather than guessing trusted place;
-- reboot while Location stays off: the pre-reboot trusted session must not match, even if Android later reuses a similar network-handle value;
+- with Location disabled, register the currently active Wi-Fi as Maison: configuration must succeed in session-only mode;
+- while that exact Wi-Fi session remains active, a normal request should return the Maison response;
+- disconnect/reconnect while Location stays off: session-only Maison must fail closed;
+- reboot while Location stays off: the pre-reboot session-only Maison must fail closed;
+- enable Location and re-register Maison: the configuration should upgrade to durable SSID-hash mode when Android exposes the SSID;
+- register trusted Wi-Fi with Location on, then switch Location off without disconnecting Wi-Fi: durable trusted-place continuity should continue for the same session;
+- switch to another readable Wi-Fi: the old trusted network must not match;
 - obtain a real location, switch Location off, then request again: an explicitly aged VeVak remembered point may be used;
 - wait beyond the 24-hour retention window: remembered point must no longer be returned;
 - mocked positions must never enter persistent memory;
