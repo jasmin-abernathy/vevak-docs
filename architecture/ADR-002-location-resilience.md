@@ -24,13 +24,16 @@ VeVak uses graceful degradation instead of trying to bypass Android.
 
 When Android exposes the SSID, VeVak hashes it with SHA-256 and compares it to the configured trusted-network hash.
 
-At the same time, VeVak stores an app-private hash of Android's opaque `Network.networkHandle` for that **already verified network session**. If Android later redacts the SSID because Location was switched off, VeVak may continue to recognise the trusted place only while that exact Android Wi-Fi session remains active.
+At the same time, VeVak stores an app-private hash of Android's opaque `Network.networkHandle` for that **already verified network session**, together with Android's read-only `Settings.Global.BOOT_COUNT`. If Android later redacts the SSID because Location was switched off, VeVak may continue to recognise the trusted place only while both conditions remain true:
+
+- the exact Android Wi-Fi network session is unchanged;
+- the device is still in the same boot in which that session was positively verified.
 
 A visible SSID non-match always wins. The session marker is never allowed to override evidence that the phone is connected to a different readable Wi-Fi network.
 
-After Wi-Fi reconnect, reboot or network-session replacement, the session marker no longer matches and VeVak fails closed until Android allows a positive Wi-Fi identification again.
+After Wi-Fi reconnect, reboot or network-session replacement, the continuity proof fails closed until Android allows a new positive Wi-Fi identification. The boot-count check is intentionally redundant with the network handle so that a later reuse of a handle value cannot resurrect an old trusted session across a reboot.
 
-This requires `ACCESS_NETWORK_STATE`, a normal read-only Android permission. The canonical FOSS variant still does not request `INTERNET`.
+This requires `ACCESS_NETWORK_STATE`, a normal read-only Android permission. Reading the global boot count also requires no write access. The canonical FOSS variant still does not request `INTERNET`.
 
 ### 2. VeVak-owned last-location memory
 
@@ -70,7 +73,7 @@ Therefore radio-environment learning is deferred until real-device evidence show
 ### Positive
 
 - switching Location off no longer necessarily destroys every useful fallback;
-- the trusted-place shortcut survives the same already-verified Wi-Fi session;
+- the trusted-place shortcut survives the same already-verified Wi-Fi session within the same boot;
 - VeVak is independent from Android's volatile location cache for up to 24 hours;
 - no Internet permission or central location service is added;
 - stale data is explicitly aged instead of masquerading as current.
@@ -87,6 +90,7 @@ Therefore radio-environment learning is deferred until real-device evidence show
 - register trusted Wi-Fi with Location on, then switch Location off without disconnecting Wi-Fi: trusted-place response should continue;
 - switch to another readable Wi-Fi: the old trusted session must not match;
 - disconnect/reconnect while Location stays off: fail closed rather than guessing trusted place;
+- reboot while Location stays off: the pre-reboot trusted session must not match, even if Android later reuses a similar network-handle value;
 - obtain a real location, switch Location off, then request again: an explicitly aged VeVak remembered point may be used;
 - wait beyond the 24-hour retention window: remembered point must no longer be returned;
 - mocked positions must never enter persistent memory;
